@@ -1,4 +1,9 @@
 # TaskBoard API — Projet DevOps (ISG Sousse, 3 LIG)
+## Équipe
+- perso1KC : Git & GitHub, pipeline PR
+- perso2AB : Jenkins, pipeline dev
+- perso3F : Docker, pipeline tag
+- Perso4 : smoke tests, rapport
 
 Pipeline CI/CD autour d'une petite API REST Node.js (sans dépendance externe) avec **Git/GitHub, Jenkins, Docker**.
 
