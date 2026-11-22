@@ -1,0 +1,122 @@
+// Pipeline 1 : Build & Smoke sur Pull Request vers dev
+// Job Jenkins : Multibranch Pipeline (GitHub Branch Source, "Discover pull requests")
+// Script Path : Jenkinsfile.pr
+
+def NODE_VERSIONS = ['20', '22']          // build parallele par version de runtime
+def SAFE_TAG      = { env.BUILD_TAG.replaceAll('[^a-zA-Z0-9_.-]', '_') }
+
+pipeline {
+  agent any
+  options {
+    timestamps()
+    timeout(time: 20, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '15', artifactNumToKeepStr: '10'))
+    disableConcurrentBuilds(abortPrevious: true)
+  }
+  parameters {
+    booleanParam(name: 'FORCE_SMOKE_FAIL', defaultValue: false,
+                 description: 'Demo : force un echec du smoke test')
+  }
+
+  stages {
+    stage('PR vers dev') {
+      when { changeRequest target: 'dev' }   // ne s'execute que pour une PR ciblant dev
+      stages {
+
+        stage('Checkout') {
+          steps {
+            checkout scm
+            sh 'mkdir -p artifacts/logs && git log -1 --pretty=format:"%h %an : %s" | tee artifacts/last-commit.txt'
+          }
+        }
+
+        stage('Setup') {
+          steps {
+            sh '''
+              docker --version
+              chmod +x scripts/smoke.sh
+              rm -rf artifacts && mkdir -p artifacts/logs
+            '''
+          }
+        }
+
+        stage('Build') {
+          steps {
+            script {
+              parallel NODE_VERSIONS.collectEntries { v ->
+                ["Build Node ${v}": {
+                  sh """#!/bin/bash
+                    set -o pipefail
+                    docker build --build-arg NODE_VERSION=${v} --build-arg APP_VERSION=pr-${env.CHANGE_ID} \\
+                      -t taskboard:pr-${env.CHANGE_ID}-node${v} app 2>&1 | tee artifacts/logs/build-node${v}.log
+                  """
+                }]
+              }
+            }
+          }
+        }
+
+        stage('Run (Docker)') {
+          steps {
+            script {
+              parallel NODE_VERSIONS.collectEntries { v ->
+                ["Run Node ${v}": {
+                  sh """
+                    docker run -d --name tb-${SAFE_TAG()}-n${v} --label ci=${SAFE_TAG()} \\
+                      -p ${3000 + v.toInteger()}:3000 taskboard:pr-${env.CHANGE_ID}-node${v}
+                  """
+                }]
+              }
+            }
+          }
+        }
+
+        stage('Smoke Test') {
+          steps {
+            // le stage est marque FAILED mais le pipeline continue pour archiver les preuves
+            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+              script {
+                def force = params.FORCE_SMOKE_FAIL ? '1' : '0'
+                parallel NODE_VERSIONS.collectEntries { v ->
+                  ["Smoke Node ${v}": {
+                    sh "SMOKE_FORCE_FAIL=${force} ./scripts/smoke.sh http://${env.SMOKE_HOST ?: 'localhost'}:${3000 + v.toInteger()} artifacts/smoke-node${v}.txt"
+                  }]
+                }
+              }
+            }
+          }
+        }
+
+        stage('Archive Artifacts') {
+          steps {
+            sh """#!/bin/bash
+              for c in \$(docker ps -aq --filter label=ci=${SAFE_TAG()}); do
+                docker logs \$c > artifacts/logs/container-\$(docker inspect -f '{{.Name}}' \$c | tr -d /).log 2>&1 || true
+              done
+              {
+                echo "Pipeline      : Build & Smoke (PR)"
+                echo "Job / Build   : ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+                echo "PR            : #${env.CHANGE_ID} (${env.CHANGE_BRANCH} -> ${env.CHANGE_TARGET})"
+                echo "Date          : \$(date -u +%FT%TZ)"
+                echo "--- Resultats smoke ---"
+                grep -H RESULT artifacts/smoke-node*.txt || echo "aucun resultat smoke"
+              } > artifacts/pipeline-report.txt
+            """
+            archiveArtifacts artifacts: 'artifacts/**', fingerprint: true, allowEmptyArchive: true
+          }
+        }
+      }
+    }
+  }
+
+  post {
+    always {   // Cleanup
+      sh """
+        docker ps -aq --filter label=ci=${SAFE_TAG()} | xargs -r docker rm -f || true
+        docker images -q 'taskboard:pr-${env.CHANGE_ID ?: 'x'}-*' | xargs -r docker rmi -f || true
+      """
+    }
+    success { echo 'PR : BUILD & SMOKE PASSED' }
+    failure { echo 'PR : BUILD & SMOKE FAILED' }
+  }
+}
