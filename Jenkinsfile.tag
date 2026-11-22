@@ -7,6 +7,10 @@ def SAFE_TAG      = { env.BUILD_TAG.replaceAll('[^a-zA-Z0-9_.-]', '_') }
 
 pipeline {
   agent any
+  environment {
+    // Agent Jenkins sous Windows : rend sh/bash/sed/grep... (Git for Windows) visibles par l'etape sh
+    PATH = "C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\bin;${env.PATH}"
+  }
   options {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
