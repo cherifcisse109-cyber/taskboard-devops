@@ -37,6 +37,7 @@ pipeline {
             sh '''#!/bin/bash
               set -e
               docker --version
+              sed -i 's/\\r$//' scripts/smoke.sh
               chmod +x scripts/smoke.sh
               PKG_VERSION=$(grep -m1 '"version"' app/package.json | sed -E 's/.*"([0-9]+\\.[0-9]+\\.[0-9]+)".*/\\1/')
               echo "Tag = $TAG_NAME | package.json = $PKG_VERSION"
