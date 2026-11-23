@@ -52,3 +52,14 @@ test('route inconnue retourne 404', async () => {
   const res = await fetch(`${base}/nope`);
   assert.strictEqual(res.status, 404);
 });
+test('DELETE /todos/:id supprime une tache puis retourne 404', async () => {
+const created = await (await fetch(`${base}/todos`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ title: 'a supprimer' }),
+})).json();
+const del = await fetch(`${base}/todos/${created.id}`, { method: 'DELETE' });
+assert.strictEqual(del.status, 204);
+const again = await fetch(`${base}/todos/${created.id}`, { method: 'DELETE' });
+assert.strictEqual(again.status, 404);
+});
