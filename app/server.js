@@ -13,7 +13,7 @@ function createServer() {
 
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
-      return send(res, 200, { status: 'UP' });
+      return send(res, 200, { status: 'DOWN' });
     }
     if (req.method === 'GET' && req.url === '/version') {
       return send(res, 200, { name: pkg.name, version: pkg.version, node: process.version });
