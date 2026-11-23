@@ -37,7 +37,15 @@ function createServer() {
       });
       return;
     }
-    return send(res, 404, { error: 'not found' });
+  const m = req.url.match(/^\/todos\/(\d+)$/);
+if (req.method === 'DELETE' && m) {
+const idx = todos.findIndex((t) => t.id === Number(m[1]));
+if (idx === -1) return send(res, 404, { error: 'todo not found' });
+todos.splice(idx, 1);
+res.writeHead(204);
+return res.end();
+}
+return send(res, 404, { error: 'not found' });
   });
 }
 
