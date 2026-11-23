@@ -7,6 +7,10 @@ def SAFE_TAG      = { env.BUILD_TAG.replaceAll('[^a-zA-Z0-9_.-]', '_') }
 
 pipeline {
   agent any
+  environment {
+    // Agent Jenkins sous Windows : rend sh/bash/sed/grep... (Git for Windows) visibles par l'etape sh
+    PATH = "C:\\Program Files\\Git\\usr\\bin;C:\\Program Files\\Git\\bin;${env.PATH}"
+  }
   options {
     timestamps()
     timeout(time: 30, unit: 'MINUTES')
@@ -37,6 +41,7 @@ pipeline {
             sh '''#!/bin/bash
               set -e
               docker --version
+              sed -i 's/\\r$//' scripts/smoke.sh
               chmod +x scripts/smoke.sh
               PKG_VERSION=$(grep -m1 '"version"' app/package.json | sed -E 's/.*"([0-9]+\\.[0-9]+\\.[0-9]+)".*/\\1/')
               echo "Tag = $TAG_NAME | package.json = $PKG_VERSION"
